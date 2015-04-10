@@ -8,4 +8,7 @@ object Type {
   type Feature = Int
   type FeatDict = Map[NodeId,Array[Feature]]
   type FeatNameDict = Array[Array[String]]
+  type FeatNameRevFunc = Array[String] => Option[Int]
+
+  type NodePred = (NodeId, Array[String] => Option[Int]) => Boolean
 }

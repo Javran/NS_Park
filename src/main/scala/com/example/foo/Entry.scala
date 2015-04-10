@@ -15,5 +15,11 @@ object Entry {
     val paths = new FacebookFilePath("data/facebook",0)
     val g = new FacebookGraph(sc,paths)
     // g.circles.foreach(println)
+    val nodes = g.pickNodes( (_,d) => d(Array("work","with","id","anonymized feature 205")) match {
+      case None => false
+      case Some(v) => v == 0
+    }
+    )
+    nodes.foreach(println)
   }
 }

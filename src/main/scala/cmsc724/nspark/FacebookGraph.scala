@@ -14,4 +14,21 @@ class FacebookGraph(val sCtxt: SparkContext, val paths: FacebookFilePath) {
   val edges: EdgeDict =
     allNodes.foldLeft(edgeRaw)((acc, x) => Util.addBiPair((x, egoId), acc))
   val featNames: FeatNameDict = FacebookGraphLoader.loadFeatNames(sCtxt, paths.featNames)
+
+  private val featNameRevDict: Map[Array[String], Int] = featNames.zipWithIndex.toMap
+  def featNameToIndex (s : Array[String]): Option[Int] = featNameRevDict.get(s)
+
+  def pickNodes (nPred: NodePred): Seq[NodeId] = {
+    val nodes = allNodes.toList
+    def pred (n: NodeId): Boolean = {
+      def getFeature (s : Array[String]): Option[Int] = {
+        featNameToIndex(s) match {
+          case None => None
+          case Some(ind) => Some(feats(n).apply(ind))
+        }
+      }
+      nPred (n,getFeature)
+    }
+    nodes.filter(pred).toSeq
+  }
 }
