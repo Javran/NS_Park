@@ -1,4 +1,4 @@
-name := "NS_Park"
+name := "NSpark"
 
 version := "1.0"
 
