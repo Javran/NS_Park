@@ -11,6 +11,7 @@ import org.apache.spark.rdd._
 object Entry {
 
   type FeatureAttr = (NodeId, Set[String])
+  type NodePredicate = FeatureAttr => Boolean
 
   def main(args: Array[String]) {
     val conf = new SparkConf().setAppName("Simple Application").setMaster("local[4]")
@@ -35,9 +36,26 @@ object Entry {
     val allEgoEdges: Map[NodeId, RDD[(NodeId,NodeId)]] = allEgos
       .map( n => {
         val ps = new FacebookFilePath("data/facebook", n)
-        val edges = loadEdges(ps.edges,sc)
-        (n,edges)
+        val edges: RDD[(NodeId,NodeId)] = loadEdges(ps.edges,sc)
+        // get all nodes from feature list
+        val nodes: RDD[NodeId] = allEgoFeaturesDict(n).map(_._1)
+        // create edges from ego
+        val edgesFromEgo: RDD[(NodeId,NodeId)] = nodes.withFilter(n2 => n2 != n).map( (n,_) )
+        // note that for facebook, all edges are undirected,
+        // therefore allUndirEdges are just half of the whole edge list
+        val allUndirEdges: RDD[(NodeId,NodeId)] = edges ++ edgesFromEgo
+        val allRevEdges: RDD[(NodeId,NodeId)] = allUndirEdges.map({case (a,b) => (b,a)})
+        (n,allUndirEdges++allRevEdges)
       }).toMap
+
+    val nodes: RDD[FeatureAttr] = allEgoFeaturesDict(0)
+    val edges: RDD[(NodeId,NodeId)] = allEgoEdges(0)
+
+    def testNodepred( fAttr : FeatureAttr ): Boolean = fAttr match {
+      case (_,attrSet) => attrSet.exists( p => p.contains("hometown;id") && p.contains("81") )
+    }
+    val nodesOfInterest: RDD[FeatureAttr] = nodes.withFilter(testNodepred)
+    nodesOfInterest.foreach(println)
   }
 
   def loadEdges(path: String, sc: SparkContext): RDD[(NodeId,NodeId)] = {
