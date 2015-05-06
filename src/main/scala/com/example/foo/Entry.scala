@@ -7,6 +7,7 @@ import cmsc724.nspark.FacebookFilePath
 import cmsc724.nspark.FacebookGraph
 import cmsc724.nspark.Type._
 import org.apache.spark.rdd._
+import SparkContext._
 
 object Entry {
 
@@ -49,13 +50,23 @@ object Entry {
       }).toMap
 
     val nodes: RDD[FeatureAttr] = allEgoFeaturesDict(0)
-    val edges: RDD[(NodeId,NodeId)] = allEgoEdges(0)
+    val edges: RDD[(Int,NodeId)] = allEgoEdges(0)
 
     def testNodepred( fAttr : FeatureAttr ): Boolean = fAttr match {
       case (_,attrSet) => attrSet.exists( p => p.contains("hometown;id") && p.contains("81") )
     }
-    val nodesOfInterest: RDD[FeatureAttr] = nodes.withFilter(testNodepred)
-    nodesOfInterest.foreach(println)
+    val nodesOfInterest: RDD[(NodeId,Set[String])] = nodes.withFilter(testNodepred)
+
+    // (node,feature) join (node,[node]) => (node,(feature, [node]))
+    def transformValue(v: (NodeId, (Set[String], Iterable[NodeId]))): (NodeId, (Set[String], Long, Boolean, Iterable[NodeId])) = v match {
+      case (nId,(fAttr,ns)) =>
+        val w = fAttr.size + ns.size
+        (nId,(fAttr,w,true,ns))
+    }
+    val edges1: RDD[(NodeId, Iterable[NodeId])] = edges.groupByKey
+    val stage1_join: RDD[(NodeId, (Set[String], Iterable[NodeId]))] = nodesOfInterest join edges1
+    val stage1: RDD[(NodeId, (Set[String], Long, Boolean, Iterable[NodeId]))] = stage1_join.map(transformValue)
+    stage1.foreach(println)
   }
 
   def loadEdges(path: String, sc: SparkContext): RDD[(NodeId,NodeId)] = {
