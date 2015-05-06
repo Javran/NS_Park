@@ -5,6 +5,7 @@ import java.util.Arrays;
 import java.util.List;
 
 import util.TriangleCount;
+import util.WeakTiesCount;
 
 import com.tinkerpop.blueprints.Direction;
 import com.tinkerpop.blueprints.Edge;
@@ -34,11 +35,12 @@ public class TestBluePrints {
 		
 		List<Edge> edges = new ArrayList<Edge>();
 		edges.add(e);
-		edges.add(e2);
+//		edges.add(e2);
 		edges.add(e3);
 		edges.add(e4);
 		edges.add(e5);
-		TriangleCount.counts(edges);
+//		TriangleCount.counts(edges);
+		WeakTiesCount.counts(edges);
 		
 //		TriangleCount.counts(Arrays.asList(new String[] { "ABC", "CDEF", "AIF", "BGHI", "CKJI", "AGKD", "AHJE" }));
 	}
