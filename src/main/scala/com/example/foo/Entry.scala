@@ -70,16 +70,22 @@ object Entry {
     // assume we only interest in 1-hop subgraph
     // then just adding the query node back should be enough to construct the subgraph
     val subgraphs: RDD[(NodeId, (Set[String], Long, Set[NodeId]))] =
-      stage1.map {case (k,(attr,w,s)) => (k,(attr,w,s.toSet + k)) }
+      stage1.map { case (k, (attr, w, s)) => (k, (attr, w, s.toSet + k)) }
     val shingleLimit: Int = 4
-    val subgraphShinglePairs: RDD[(NodeId,(Long,List[NodeId]))] =
-      subgraphs.map {case (k,(attr,w,s)) => (k,(w,s.toList.sorted.take(shingleLimit)  )) }.sortBy { case (k,(w,s)) => s.mkString("") }
-    subgraphShinglePairs.foreach(println)
-
-    println (Util.groupByWeight(8, List(7,3,3,3,4,5)).mkString(","))
+    val subgraphWeightPairs: RDD[(NodeId, Long)] =
+      subgraphs.map { case (k, (attr, w, s)) => (k, (w, s.toList.sorted.take(shingleLimit))) }
+        .sortBy { case (k, (w, s)) => s.mkString("") }
+        .map { case (k, (w, _)) => (k, w) }
+    val partitionPlanStage1: List[ List[(NodeId,Long)] ] =
+      Util.groupByWeight( (x:(NodeId,Long)) => x._2 , 100L, subgraphWeightPairs.toLocalIterator.toList)
+    // queryId, bin
+    val partitionPlanStage2: List[ (NodeId,Int) ] =
+      partitionPlanStage1.zipWithIndex.flatMap { case (grp,ind) => grp.map{case (v,_) => (v,ind)}}
+    // subgraphWeightPairs.foreach(println)
+    println(partitionPlanStage2.mkString( "|"))
   }
 
-  def loadEdges(path: String, sc: SparkContext): RDD[(NodeId,NodeId)] = {
+  def loadEdges(path: String, sc: SparkContext): RDD[(NodeId, NodeId)] = {
     sc.textFile(path).map(raw => {
       val splitted = Util.splitWords(raw).map(_.toInt)
       assert(splitted.length == 2)

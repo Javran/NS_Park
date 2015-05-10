@@ -41,9 +41,9 @@ object Util {
     }
   }
 
-  def groupByWeight(limit: Int, xs: List[Int]) : List[List[Int]] = {
-    val ys = xs zip (  (xs.scanLeft(0)(_ + _)).tail )
-    def groupByWeightWithBase(base: Int, pairs: List[(Int,Int)]) : List[List[(Int,Int)]] = pairs match {
+  def groupByWeight[T](select: T => Long, limit: Long, xs: List[T]) : List[List[T]] = {
+    val ys: List[(T,Long)] = xs zip (  (xs.map(select).scanLeft(0L)(_ + _)).tail )
+    def groupByWeightWithBase(base: Long, pairs: List[(T,Long)]) : List[List[(T,Long)]] = pairs match {
       case Nil => Nil
       case ((m,n) :: xs) if (n-base > limit) => List((m,n)) :: groupByWeightWithBase(n,xs)
       case _ =>
