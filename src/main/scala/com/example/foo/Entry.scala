@@ -58,15 +58,25 @@ object Entry {
     val nodesOfInterest: RDD[(NodeId,Set[String])] = nodes.withFilter(testNodepred)
 
     // (node,feature) join (node,[node]) => (node,(feature, [node]))
-    def transformValue(v: (NodeId, (Set[String], Iterable[NodeId]))): (NodeId, (Set[String], Long, Boolean, Iterable[NodeId])) = v match {
+    def transformValue(v: (NodeId, (Set[String], Iterable[NodeId]))): (NodeId, (Set[String], Long, Iterable[NodeId])) = v match {
       case (nId,(fAttr,ns)) =>
         val w = fAttr.size + ns.size
-        (nId,(fAttr,w,true,ns))
+        (nId,(fAttr,w,ns))
     }
     val edges1: RDD[(NodeId, Iterable[NodeId])] = edges.groupByKey
     val stage1_join: RDD[(NodeId, (Set[String], Iterable[NodeId]))] = nodesOfInterest join edges1
-    val stage1: RDD[(NodeId, (Set[String], Long, Boolean, Iterable[NodeId]))] = stage1_join.map(transformValue)
-    stage1.foreach(println)
+    val stage1: RDD[(NodeId, (Set[String], Long, Iterable[NodeId]))] = stage1_join.map(transformValue)
+    // stage1: (node id, (set of attribute, weight, set of neighborhoods)
+    // assume we only interest in 1-hop subgraph
+    // then just adding the query node back should be enough to construct the subgraph
+    val subgraphs: RDD[(NodeId, (Set[String], Long, Set[NodeId]))] =
+      stage1.map {case (k,(attr,w,s)) => (k,(attr,w,s.toSet + k)) }
+    val shingleLimit: Int = 4
+    val subgraphShinglePairs: RDD[(NodeId,(Long,List[NodeId]))] =
+      subgraphs.map {case (k,(attr,w,s)) => (k,(w,s.toList.sorted.take(shingleLimit)  )) }.sortBy { case (k,(w,s)) => s.mkString("") }
+    subgraphShinglePairs.foreach(println)
+
+    println (Util.groupByWeight(8, List(7,3,3,3,4,5)).mkString(","))
   }
 
   def loadEdges(path: String, sc: SparkContext): RDD[(NodeId,NodeId)] = {
