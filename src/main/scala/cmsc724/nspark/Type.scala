@@ -3,6 +3,8 @@ package cmsc724.nspark
 object Type {
   type NodeId = Int
   type Edge = (NodeId, NodeId)
+  type Attr = String
+  type AttrSet = Set[Attr]
 //  type CircleDict = Map[String,Set[NodeId]]
 //  type EdgeDict = Map[NodeId,Set[NodeId]]
 //  type Feature = Int

@@ -27,42 +27,14 @@ object Entry {
     val conf = new SparkConf().setAppName("Simple Application").setMaster("local[4]")
     val sc = new SparkContext(conf)
     val dataSetInfo = new DataSetInfo("data/facebook",0,true)
+    // val dataSetInfo = new DataSetInfo("data/twitter",14807093,false)
 
-    // scan the directory to get all ego node names
-    val allEgos: Set[NodeId] = new File(dataSetInfo.basePath)
-      .listFiles
-      .flatMap(f => Util.safeToInt(Util.fileBaseName(f)))
-      .toSet
-
-    val allEgoFeaturesDict: Map[NodeId, RDD[FeatureAttr]] = allEgos
-      .map(n => {
-        val ps = dataSetInfo
-        val fAttr = loadFeatNameFile(ps.featNamesPath, sc)
-        val egoFeature = (ps.egoNodeId, loadEgoFeature(ps.egoFeaturePath, sc, fAttr))
-        val allFeats = sc.parallelize(Seq(egoFeature)) ++ loadFeature(ps.featuresPath, sc, fAttr)
-        (n, allFeats)
-      }).toMap
-
-    val allEgoEdges: Map[NodeId, RDD[(NodeId,NodeId)]] = allEgos
-      .map( n => {
-        val ps = dataSetInfo
-        val edges: RDD[(NodeId,NodeId)] = loadEdges(ps.edgesPath,sc)
-        // get all nodes from feature list
-        val nodes: RDD[NodeId] = allEgoFeaturesDict(n).map(_._1)
-        // create edges from ego
-        val edgesFromEgo: RDD[(NodeId,NodeId)] = nodes.withFilter(n2 => n2 != n).map( (n,_) )
-        // note that for facebook, all edges are undirected,
-        // therefore allUndirEdges are just half of the whole edge list
-        val allUndirEdges: RDD[(NodeId,NodeId)] = edges ++ edgesFromEgo
-        val allRevEdges: RDD[(NodeId,NodeId)] = allUndirEdges.map({case (a,b) => (b,a)})
-        (n,allUndirEdges++allRevEdges)
-      }).toMap
-
-    val nodes: RDD[FeatureAttr] = allEgoFeaturesDict(0)
-    val edges: RDD[(Int,NodeId)] = allEgoEdges(0)
+    val (nodes,edges)= dataSetInfo.loadGraph(sc)
 
     def testNodepred( fAttr : FeatureAttr ): Boolean = fAttr match {
-      case (_,attrSet) => attrSet.exists( p => p.contains("hometown;id") && p.contains("81") )
+      case (_,attrSet) =>
+        //attrSet.exists( p => p.contains("@amazon") )
+        attrSet.exists( p => p.contains("hometown;id") && p.contains("81") )
     }
     val nodesOfInterest: RDD[(NodeId,Set[String])] = nodes.withFilter(testNodepred)
 
@@ -134,42 +106,4 @@ object Entry {
     })
   }
 
-  def loadEgoFeature(path: String, sc: SparkContext, featNameArr: Array[String]): Set[String] = {
-    val raw: RDD[String] = sc.textFile(path)
-    assert(raw.count() == 1);
-    val splitted = Util.splitWords(raw.first).map(_.toInt)
-    assert(splitted.length == featNameArr.length)
-    val attrs: Set[String] = (featNameArr zip splitted)
-      .flatMap { case (a, i) => if (i == 1) Some(a) else None }
-      .toSet
-    attrs
-  }
-
-  def loadFeature(path: String, sc: SparkContext, featNameArr: Array[String]): RDD[FeatureAttr] = {
-    sc.textFile(path).map(l => {
-      val cols = Util.splitWords(l).map(_.toInt)
-      assert(cols.tail.length == featNameArr.length)
-      val attrs = (featNameArr zip cols.tail)
-        .flatMap(p =>
-          if (p._2 == 1) Some(p._1)
-          else None)
-        .toSet
-      (cols.head, attrs)
-    })
-  }
-
-  // load feature name files
-  def loadFeatNameFile(path: String, sc: SparkContext): Array[String] = {
-    def splitAtFirstSpace(xs: String): (Long, String) = xs.span(_ != ' ') match {
-      case (l, c) => (l.toLong, c)
-    }
-
-    def splitAndVerify(raw: String, n: Long): String = splitAtFirstSpace(raw) match {
-      case (l, c) => assert(n == l); c
-    }
-    sc.textFile(path)
-      .zipWithIndex
-      .map(d => d match { case (n, l) => splitAndVerify(n, l) })
-      .toArray
-  }
 }
