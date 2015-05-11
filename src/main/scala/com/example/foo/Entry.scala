@@ -4,6 +4,7 @@ import java.io.File
 import org.apache.spark._
 import cmsc724.nspark.Util
 import cmsc724.nspark.FacebookFilePath
+import cmsc724.nspark.DataSetInfo
 import cmsc724.nspark.FacebookGraph
 import cmsc724.nspark.Type._
 import org.apache.spark.rdd._
@@ -25,27 +26,27 @@ object Entry {
   def main(args: Array[String]) {
     val conf = new SparkConf().setAppName("Simple Application").setMaster("local[4]")
     val sc = new SparkContext(conf)
-    val paths = new FacebookFilePath("data/facebook", 0)
+    val dataSetInfo = new DataSetInfo("data/facebook",0,true)
 
     // scan the directory to get all ego node names
-    val allEgos: Set[NodeId] = new File(paths.basePath)
+    val allEgos: Set[NodeId] = new File(dataSetInfo.basePath)
       .listFiles
       .flatMap(f => Util.safeToInt(Util.fileBaseName(f)))
       .toSet
 
     val allEgoFeaturesDict: Map[NodeId, RDD[FeatureAttr]] = allEgos
       .map(n => {
-        val ps = new FacebookFilePath("data/facebook", n)
-        val fAttr = loadFeatNameFile(ps.featNames, sc)
-        val egoFeature = (ps.egoId, loadEgoFeature(ps.egoFeat, sc, fAttr))
-        val allFeats = sc.parallelize(Seq(egoFeature)) ++ loadFeature(ps.feat, sc, fAttr)
+        val ps = dataSetInfo
+        val fAttr = loadFeatNameFile(ps.featNamesPath, sc)
+        val egoFeature = (ps.egoNodeId, loadEgoFeature(ps.egoFeaturePath, sc, fAttr))
+        val allFeats = sc.parallelize(Seq(egoFeature)) ++ loadFeature(ps.featuresPath, sc, fAttr)
         (n, allFeats)
       }).toMap
 
     val allEgoEdges: Map[NodeId, RDD[(NodeId,NodeId)]] = allEgos
       .map( n => {
-        val ps = new FacebookFilePath("data/facebook", n)
-        val edges: RDD[(NodeId,NodeId)] = loadEdges(ps.edges,sc)
+        val ps = dataSetInfo
+        val edges: RDD[(NodeId,NodeId)] = loadEdges(ps.edgesPath,sc)
         // get all nodes from feature list
         val nodes: RDD[NodeId] = allEgoFeaturesDict(n).map(_._1)
         // create edges from ego
@@ -113,16 +114,16 @@ object Entry {
       .join(nodes).map { case (nId, (_, attr)) => (nId, attr) }
 
     vsWithAttrs.foreach(println)
-    // * re-apply Pqv, extracting edges
-    val nodesOfInterest2: RDD[(NodeId,Set[String])] = vsWithAttrs.withFilter(testNodepred)
-    // * get 1-hop neighborhoods
-    val subgraphParts: RDD[(NodeId, (Set[String], Iterable[NodeId]))] =
-      nodesOfInterest2
-        .join(edges1)
-
-    //val partsQueryVertices: RDD[]
-    // * collect vertices and edges, and send them to the user specified computation
-    val edgesOfInterest: RDD[(NodeId,NodeId)] = ???
+//    // * re-apply Pqv, extracting edges
+//    val nodesOfInterest2: RDD[(NodeId,Set[String])] = vsWithAttrs.withFilter(testNodepred)
+//    // * get 1-hop neighborhoods
+//    val subgraphParts: RDD[(NodeId, (Set[String], Iterable[NodeId]))] =
+//      nodesOfInterest2
+//        .join(edges1)
+//
+//    //val partsQueryVertices: RDD[]
+//    // * collect vertices and edges, and send them to the user specified computation
+//    val edgesOfInterest: RDD[(NodeId,NodeId)] = ???
   }
 
   def loadEdges(path: String, sc: SparkContext): RDD[(NodeId, NodeId)] = {

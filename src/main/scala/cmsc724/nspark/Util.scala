@@ -1,8 +1,17 @@
 package cmsc724.nspark
 
 import java.io.File
+import cmsc724.nspark.Type._
 
 object Util {
+  // scan edo nodes under a basePath
+  def scanEgoNode(basePath: String): Set[NodeId] = {
+     new File(basePath)
+      .listFiles
+      .flatMap(f => Util.safeToInt(Util.fileBaseName(f)))
+      .toSet
+  }
+  
   // split a string (separated by spaces)
   // into a list of strings
   def splitWords(raw : String) : Seq[String] = {
