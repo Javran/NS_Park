@@ -14,6 +14,14 @@ object Entry {
   type FeatureAttr = (NodeId, Set[String])
   type NodePredicate = FeatureAttr => Boolean
 
+  class SimplePartitioner(partitionCount: Int) extends Partitioner {
+    def getPartition(key: Any):Int = {
+      val k = key.asInstanceOf[Int]
+      return k;
+    }
+    def numPartitions = partitionCount
+  }
+
   def main(args: Array[String]) {
     val conf = new SparkConf().setAppName("Simple Application").setMaster("local[4]")
     val sc = new SparkContext(conf)
@@ -78,11 +86,43 @@ object Entry {
         .map { case (k, (w, _)) => (k, w) }
     val partitionPlanStage1: List[ List[(NodeId,Long)] ] =
       Util.groupByWeight( (x:(NodeId,Long)) => x._2 , 100L, subgraphWeightPairs.toLocalIterator.toList)
+    val maxPartCount = partitionPlanStage1.size
     // queryId, bin
-    val partitionPlanStage2: List[ (NodeId,Int) ] =
-      partitionPlanStage1.zipWithIndex.flatMap { case (grp,ind) => grp.map{case (v,_) => (v,ind)}}
-    // subgraphWeightPairs.foreach(println)
-    println(partitionPlanStage2.mkString( "|"))
+    val partitionPlanStage2: List[(NodeId, Int)] =
+      partitionPlanStage1.zipWithIndex.flatMap { case (grp, ind) => grp.map { case (v, _) => (v, ind) } }
+
+    val graphIdBinIdPairs: RDD[(NodeId, Int)] = sc.parallelize(partitionPlanStage2)
+
+    // get query graph
+    val binNodePairs: RDD[(Int, NodeId)] =
+      graphIdBinIdPairs
+        .join(subgraphs)
+        .flatMap { case (nId, (binId, (_, _, sbNodes))) => sbNodes.map((binId, _)) }
+    // --------- bin packing is done
+    val parts: RDD[(Int, Iterable[(Int, NodeId)])] =
+      binNodePairs.groupBy(((p: (Int, NodeId)) => p._1), new SimplePartitioner(maxPartCount))
+
+    val parts1: RDD[NodeId] = parts.flatMap { case (_, it) => it.map(_._2) }
+//    val parts1: RDD[NodeId] = parts.mapPartitions( (it:Iterator[(Int,Iterable[(Int,NodeId)])])  => {
+//      it.flatMap {case (_,itb) => itb.map{case (i,n) => n} }
+//    }, true)
+
+    // vertices sent to different workers
+    val vsWithAttrs: RDD[(NodeId, Set[String])] = parts1
+      .map((_, ()))
+      .join(nodes).map { case (nId, (_, attr)) => (nId, attr) }
+
+    vsWithAttrs.foreach(println)
+    // * re-apply Pqv, extracting edges
+    val nodesOfInterest2: RDD[(NodeId,Set[String])] = vsWithAttrs.withFilter(testNodepred)
+    // * get 1-hop neighborhoods
+    val subgraphParts: RDD[(NodeId, (Set[String], Iterable[NodeId]))] =
+      nodesOfInterest2
+        .join(edges1)
+
+    //val partsQueryVertices: RDD[]
+    // * collect vertices and edges, and send them to the user specified computation
+    val edgesOfInterest: RDD[(NodeId,NodeId)] = ???
   }
 
   def loadEdges(path: String, sc: SparkContext): RDD[(NodeId, NodeId)] = {
